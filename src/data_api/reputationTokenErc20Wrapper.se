@@ -1,6 +1,6 @@
 # Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
 
-extern reputationToken: [totalSupply:[uint256]:uint256, balanceOf:[uint256,address]:uint256, transfer:[uint256,address,uint256]:uint256, transferFrom:[uint256,address,address,uint256]:uint256, approve:[uint256,address,uint256]:uint256, allowance:[uint256,address,address]:uint256]
+extern reputationToken: [allowance:[int256,int256,int256]:uint256, approve:[int256,int256,int256]:int256, balanceOf:[int256,int256]:uint256, getErc20Token:[int256]:int256, migrate:[int256,int256,int256]:int256, migrateFromLegacyRepContract:[int256]:int256, privateTransfer:[int256,int256,int256,int256]:int256, totalSupply:[int256]:uint256, transfer:[int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256]:int256]
 
 inset('../macros/refund.sem')
 

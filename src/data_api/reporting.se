@@ -1,6 +1,8 @@
 # Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
 
-extern controller: [lookup:[int256]:int256, checkWhitelist:[int256]:int256]
+extern controller: [lookup:[int256]:int256, assertIsWhitelisted:[int256]:int256]
+
+EVENTS = self.controller.lookup('events')
 extern events: [allowance:[int256,int256]:uint256, approve:[int256,int256]:int256, assertEventIsInAutomatedReportDisputePhase:[int256]:int256, assertEventIsInAutomatedReportPhase:[int256]:int256, assertEventIsInCurrentReportingWindow:[int256]:int256, assertEventIsInDisputePhase:[int256]:int256, assertEventIsInReportingPhase:[int256]:int256, assertEventIsNotDoneWithReporters:[int256]:int256, assertEventIsNotFinalized:[int256]:int256, assertReporterHasRegistrationToken:[int256]:int256, automatedReport:[int256,int256]:_, balanceOf:[int256,int256,int256,int256]:uint256, createEvent:[int256,int256,int256,int256]:int256, disputeAllReporters:[int256]:_, disputeAutomatedReport:[int256]:_, disputeLimitedReporters:[int256]:_, finalizeEvent:[int256]:_, getAutomatedReportDisputeDueTimestamp:[int256]:int256, getAutomatedReportDueTimestamp:[int256]:int256, getEventBranch:[int256]:int256, getNumberOfAllReporterEvents:[int256,int256]:int256, getNumberOfLimitedReporterEvents:[int256,int256]:int256, isEventFinalized:[int256]:int256, migrateEventThroughAllForks:[int256]:int256, migrateEventThroughOneFork:[int256]:int256, privateAdjustTentativeOutcome:[int256,int256]:_, privateBuyToken:[int256,int256,int256,int256]:_, privateRedeemCorrectOutcomeTokens:[int256,int256,int256,int256]:int256, privateTransfer:[int256,int256,int256,int256,int256,int256]:int256, privateTryRedeemTokensForNonForkingEventOnForkedBranch:[int256,int256,int256,int256]:int256, privateTryRedeemTokensOnForkingEvent:[int256,int256,int256,int256]:int256, redeemTokens:[int256,int256,int256]:int256, report:[int256,int256,int256]:int256, totalSupply:[int256,int256,int256]:uint256, transfer:[int256,int256,int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256,int256,int256]:int256, tryFinalizeEvent:[int256]:int256]
 
 inset('../macros/refund.sem')
@@ -27,7 +29,7 @@ def any():
 # only to be called for events being reported on by a subset of reporters, up to caller to make sure the event is generally elligible for reporting right now
 def assertCanReportOnEvent(eventId, reporterAddress):
     # CONSIDER: change this scheme to just disallowing more than `n` reports per event, but allow anyone to report on anything
-    branch = self.controller.lookup('events').getEventBranch(eventId)
+    branch = EVENTS.getEventBranch(eventId)
     currentReportingWindow = self.getCurrentReportingWindow()
     seed = self.getUserSeed(branch, currentReportingWindow, reporterAddress)
     reportsPerReporter = self.getTargetReportsPerReporter(branch, reportingWindow)
@@ -52,7 +54,7 @@ def assertDoneReporting(branch, reportingWindow, reporterAddress):
 
 # FIXME: gas issue
 def clearUserReports(branch, reportingWindow, reporterAddress):
-    self.controller.checkWhitelist(msg.sender)
+    self.controller.assertIsWhitelisted(msg.sender)
     i = 0
     while(i < self.userReports[branch][reportingWindow][reporterAddress].reportedEventsCount):
         self.userReports[branch][reportingWindow][reporterAddress].reportedEvents[i] = 0
@@ -62,7 +64,7 @@ def clearUserReports(branch, reportingWindow, reporterAddress):
     return(1)
 
 def noteUserReport(branch, eventId):
-    self.controller.checkWhitelist(msg.sender)
+    self.controller.assertIsWhitelisted(msg.sender)
     currentReportingWindow = self.getCurrentReportingWindow()
     startingEventCount = self.userReports[branch][currentReportingWindow][reporterAddress].reportedEventsCount
     self.userReports[branch][currentReportingWindow][reporterAddress].reportedEvents[startingEventCount] = eventId

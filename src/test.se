@@ -1,13 +1,7 @@
-data banana
+extern markets: [addFees:[int256,int256]:int256, addToMarketsHash:[int256,int256]:int256, getBondsMan:[int256]:int256, getBranch:[int256]:int256, getCumulativeScale:[int256]:int256, getExtraInfo:[int256]:bytes, getExtraInfoLength:[int256]:int256, getFees:[int256]:int256, getGasSubsidy:[int256]:int256, getLastExpDate:[int256]:int256, getMarketEvent:[int256]:int256, getMarketNumOutcomes:[int256]:int256, getMarketResolved:[int256]:int256, getMarketShareContracts:[int256]:int256[], getMarketsHash:[int256]:int256, getOriginalTradingPeriod:[int256]:int256, getOutcomeShareContract:[int256,int256]:int256, getOutcomeShareWallet:[int256,int256]:int256, getParticipantSharesPurchased:[int256,int256,int256]:int256, getPushedForward:[int256]:int256, getSharesPurchased:[int256,int256]:uint256, getSharesValue:[int256]:int256, getTags:[int256]:int256[], getTopic:[int256]:int256, getTotalSharesPurchased:[int256]:int256, getTradingFee:[int256]:int256, getTradingPeriod:[int256]:int256, initializeMarket:[int256,int256,int256,int256,int256,int256,int256,int256,int256,int256,bytes,int256,int256,int256,int256[],int256[]]:int256, modifySharesValue:[int256,int256]:int256, refundClosing:[int256,int256]:int256, setController:[address]:int256, setMarketResolved:[int256]:int256, setPushedForward:[int256,int256,int256]:int256, setTradingFee:[int256,int256]:int256, setTradingPeriod:[int256,int256]:int256, suicideFunds:[address]:_]
+extern shareTokens: [allowance:[address,address]:int256, approve:[address,uint256]:int256, balanceOf:[address]:int256, createShares:[address,uint256]:int256, destroyShares:[address,uint256]:int256, getDecimals:[]:int256, getName:[]:int256, getSymbol:[]:int256, setController:[address]:int256, suicideFunds:[address]:_, totalSupply:[]:int256, transfer:[address,uint256]:int256, transferFrom:[address,address,uint256]:int256]
 
-data controller
-
-extern subcurrency: [allowance:[address,address]:uint256, approve:[address,uint256]:uint256, balanceOf:[address]:uint256, decimals:[]:uint256, name:[]:uint256, symbol:[]:uint256, totalSupply:[]:uint256, transfer:[address,uint256]:uint256, transferFrom:[address,address,uint256]:uint256]
-
-def init():
-    self.controller = 0x0
-
-def ok():
-    x = create('functions/cash.se')
-    y = x.allowance(msg.sender, self, gas = 30000)
-    return(y)
+def ok(caddr):
+    # y = caddr.createShares(5, 11)
+    y = caddr
+    return(caddr)

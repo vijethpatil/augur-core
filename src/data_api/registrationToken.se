@@ -1,8 +1,8 @@
 # Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
 
-extern controller: [lookup:[int256]:int256, checkWhitelist:[int256]:int256]
-extern reputationToken.se: [allowance:[int256,int256,int256]:uint256, approve:[int256,int256,int256]:int256, balanceOf:[int256,int256]:uint256, getErc20Token:[int256]:int256, migrate:[int256,int256,int256]:int256, migrateFromLegacyRepContract:[int256]:int256, privateTransfer:[int256,int256,int256,int256]:int256, totalSupply:[int256]:uint256, transfer:[int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256]:int256]
-extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int256]:_]
+extern controller: [lookup:[int256]:int256, assertIsWhitelisted:[int256]:int256]
+extern reputationToken: [allowance:[int256,int256,int256]:uint256, approve:[int256,int256,int256]:int256, balanceOf:[int256,int256]:uint256, getErc20Token:[int256]:int256, migrate:[int256,int256,int256]:int256, migrateFromLegacyRepContract:[int256]:int256, privateTransfer:[int256,int256,int256,int256]:int256, totalSupply:[int256]:uint256, transfer:[int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256]:int256]
+extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int256]:int256]
 extern reporting: [assertCanReportOnEvent:[int256,int256]:int256, assertDoneReporting:[int256,int256,int256]:int256, clearUserReports:[int256,int256,int256]:int256, getCurrentReportingWindow:[]:int256, getCurrentReportingWindowEndTimestamp:[]:int256, getCurrentReportingWindowStartTimestamp:[]:int256, getReportingPeriodDurationInSeconds:[]:int256, getReportingWindowForTimestamp:[int256]:int256, getTargetReportsPerReporter:[int256,int256]:int256, getUserSeed:[int256,int256,int256]:int256, isInReportingDisputePhase:[]:int256, isInReportingPhase:[]:int256, noteUserReport:[int256,int256]:int256]
 
 inset('../macros/safeMath.sem')

@@ -164,9 +164,46 @@ def test_logReturn():
             assert(logged["returnArray"] == [5, 10, 15])
     test_logReturn()
 
-def test_eventBondResolution(controller, state, t):
-    s = test.state()
-    c = s.abi_contract('floatTestContract.se')
+def test_closeMarket(contracts, state, t):
+    
+    
+def createBinaryEvent(contracts):
+    global eventCreationCounter
+    t = contracts._ContractLoader__tester
+    contracts.cash.publicDepositEther(value=fix(10000), sender=t.k1)
+    contracts.cash.approve(contracts.createEvent.address, fix(10000), sender=t.k1)
+    branch = 1010101
+    contracts.reputationFaucet.reputationFaucet(branch, sender=t.k1)
+    description = "test binary event"
+    expDate = 3000000002 + eventCreationCounter
+    eventCreationCounter += 1
+    fxpMinValue = fix(1)
+    fxpMaxValue = fix(2)
+    numOutcomes = 2
+    resolution = "http://lmgtfy.com"
+    resolutionAddress = t.a2
+    currency = contracts.cash.address
+    forkResolveAddress = contracts.forkResolution.address
+    return contracts.createEvent.publicCreateEvent(branch, description, expDate, fxpMinValue, fxpMaxValue, numOutcomes, resolution, resolutionAddress, currency, forkResolveAddress, sender=t.k1)
+
+def createBinaryMarket(contracts, eventID):
+    global eventCreationCounter
+    t = contracts._ContractLoader__tester
+    contracts.cash.approve(contracts.createMarket.address, fix(10000), sender=t.k1)
+    branch = 1010101
+    fxpTradingFee = 20000000000000001
+    tag1 = 123
+    tag2 = 456
+    tag3 = 789
+    extraInfo = "rabble rabble rabble"
+    currency = contracts.cash.address
+    return contracts.createMarket.publicCreateMarket(branch, fxpTradingFee, eventID, tag1, tag2, tag3, extraInfo, currency, sender=t.k1, value=fix(10000))
+
+def fix(n):
+    return n * 10**18
+
+def unfix(n):
+    return n / 10**18
 
 # def test_controller(contracts, state, t):
     ### Useful for controller testing
@@ -191,8 +228,7 @@ if __name__ == '__main__':
     test_refund(contracts, state, t)
     test_float()
     test_logReturn()
-    test_eventBondResolution(contracts, state, t)
-    # test_closeMarket(contracts, state, t)
+    test_closeMarket(contracts, state, t)
     # test_controller(contracts, state, t)
     print "DONE TESTING RESOLUTION TESTS"
 

@@ -1,9 +1,9 @@
 # Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
 
-extern repContract: [balanceOf:[address]:uint256, transferFrom:[address,address,uint256]:uint256]
-extern reputationTokenErc20Wrapper.se: [allowance:[address,address]:int256, approve:[address,uint256]:int256, balanceOf:[address]:int256, initialize:[int256]:int256, totalSupply:[]:int256, transfer:[address,uint256]:int256, transferFrom:[address,address,uint256]:int256]
-extern controller: [lookup:[int256]:int256, checkWhitelist:[int256]:int256]
-extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int256]:_]
+extern repContract: [allowance:[address,address]:uint256, approve:[address,uint256]:uint256, balanceOf:[address]:uint256, decimals:[]:uint256, getRidOfDustForLaunch:[]:int256, getSeeded:[]:uint256, name:[]:uint256, setSaleDistribution:[address[],uint256[]]:uint256, symbol:[]:uint256, totalSupply:[]:uint256, transfer:[address,uint256]:uint256, transferFrom:[address,address,uint256]:uint256]
+extern reputationTokenErc20Wrapper: [allowance:[address,address]:int256, approve:[address,uint256]:int256, balanceOf:[address]:int256, initialize:[int256]:int256, totalSupply:[]:int256, transfer:[address,uint256]:int256, transferFrom:[address,address,uint256]:int256]
+extern controller: [lookup:[int256]:int256, assertIsWhitelisted:[int256]:int256]
+extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int256]:int256]
 
 inset('../macros/safeMath.sem')
 inset('../macros/refund.sem')

@@ -1,9 +1,9 @@
 # Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
 
-extern controller: [lookup:[int256]:int256, checkWhitelist:[int256]:int256]
-extern registrationToken.se: [allowance:[int256,int256,int256,int256]:uint256, approve:[int256,int256,int256,int256]:int256, registrationTokenBalance:[int256,int256,int256]:uint256, migrateRegistrationToken:[int256,int256,int256,int256]:int256, privateTransfer:[int256,int256,int256,int256,int256]:int256, redeem:[int256,int256]:_, register:[int256,int256]:_, totalSupply:[int256,int256]:uint256, transfer:[int256,int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256,int256]:int256]
-extern reputationToken.se: [allowance:[int256,int256,int256]:uint256, approve:[int256,int256,int256]:int256, balanceOf:[int256,int256]:uint256, getErc20Token:[int256]:int256, migrate:[int256,int256,int256]:int256, migrateFromLegacyRepContract:[int256]:int256, privateTransfer:[int256,int256,int256,int256]:int256, totalSupply:[int256]:uint256, transfer:[int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256]:int256]
-extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int256]:_]
+extern controller: [lookup:[int256]:int256, assertIsWhitelisted:[int256]:int256]
+extern registrationToken: [allowance:[int256,int256,int256,int256]:uint256, approve:[int256,int256,int256,int256]:int256, migrateRegistrationToken:[int256,int256,int256,int256]:int256, privateTransfer:[int256,int256,int256,int256,int256]:int256, redeem:[int256,int256]:_, register:[int256,int256]:_, registrationTokenBalance:[int256,int256,int256]:uint256, totalSupply:[int256,int256]:uint256, transfer:[int256,int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256,int256]:int256]
+extern reputationToken: [allowance:[int256,int256,int256]:uint256, approve:[int256,int256,int256]:int256, balanceOf:[int256,int256]:uint256, getErc20Token:[int256]:int256, migrate:[int256,int256,int256]:int256, migrateFromLegacyRepContract:[int256]:int256, privateTransfer:[int256,int256,int256,int256]:int256, totalSupply:[int256]:uint256, transfer:[int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256]:int256]
+extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int256]:int256]
 extern reporting: [assertCanReportOnEvent:[int256,int256]:int256, assertDoneReporting:[int256,int256,int256]:int256, clearUserReports:[int256,int256,int256]:int256, getCurrentReportingWindow:[]:int256, getCurrentReportingWindowEndTimestamp:[]:int256, getCurrentReportingWindowStartTimestamp:[]:int256, getReportingPeriodDurationInSeconds:[]:int256, getReportingWindowForTimestamp:[int256]:int256, getTargetReportsPerReporter:[int256,int256]:int256, getUserSeed:[int256,int256,int256]:int256, isInReportingDisputePhase:[]:int256, isInReportingPhase:[]:int256, noteUserReport:[int256,int256]:int256]
 
 inset('../macros/refund.sem')
@@ -15,7 +15,7 @@ data controller
 # tokens[branch][outcome][tokenHolderAddress]
 # tokenSupply[branch][outcome]
 # allOutcomesTokenSupply[branch]
-data events[](branch, endTime, description, automatedReporterAddress, automatedReportDueTimestamp, reportingWindow, finalOutcome, tentativeOutcome, automatedReporterOutcome, automatedReporterDisputeBondHolder, limitedReportersOutcome, limitedReportersDisputeBondHolder, allReportersOutcome, allReportersDisputeBondHolder, tokens[][][2**160], tokenSupply[][],  allOutcomesTokenSupply[])
+data events[](branch, endTime, description, automatedReporterAddress, automatedReportDueTimestamp, outcomeMin, outcomeMax, reportingWindow, finalOutcome, tentativeOutcome, automatedReporterOutcome, automatedReporterDisputeBondHolder, limitedReportersOutcome, limitedReportersDisputeBondHolder, allReportersOutcome, allReportersDisputeBondHolder, tokens[][][2**160], tokenSupply[][],  allOutcomesTokenSupply[])
 # spenders[tokenHolderAddress][spenderAddress]
 data spenders[2**160][2**160]
 data nextEventId
@@ -31,7 +31,6 @@ data allReportersDisputeBondAmount
 event Transfer(eventId, branch:uint256:indexed, outcome, from:address:indexed, to:address:indexed, attorep:uint256)
 event Approval(owner:address:indexed, spender:address:indexed, attorep:uint256)
 
-
 def init():
     self.controller = 0x0
     # TODO: figure out approprate values for these
@@ -43,7 +42,7 @@ def init():
 def any():
     refund()
 
-def createEvent(branch, endTime, description, automatedReporterAddress):
+def createEvent(branch, endTime, description, automatedReporterAddress, outcomeMin, outcomeMax):
     # FIXME: assert the user sent enough fees and validity bond
     # FIXME: assert not a duplicate event. CONSIDER: is this actually necessary?
     # FIXME: add event to tally of total events in reporting window, also be sure to move this anytime the event changes reporting windows
@@ -53,6 +52,8 @@ def createEvent(branch, endTime, description, automatedReporterAddress):
     self.events[eventId].endTime = endTime
     self.events[eventId].description = description
     self.events[eventId].automatedReporterAddress = automatedReporterAddress
+    self.events[eventId].outcomeMin = outcomeMin
+    self.events[eventId].outcomeMax = outcomeMax
     earliestReportingTime = endTime
     if (automatedReporterAddress != 0):
         earliestReportingTime = endTime + 6 * SECONDS_PER_DAY
