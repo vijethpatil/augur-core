@@ -1,0 +1,22 @@
+# Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
+
+extern controller: [lookup:[str]:address, assertIsWhitelisted:[address]:uint256, assertOnlySpecifiedCaller:[address, str]:_]
+
+inset('../macros/refund.sem')
+
+data controller
+# forkingEvents[branch] returns event id
+data forkingEvents[]
+
+def init():
+    self.controller = 0x0
+
+def any():
+    refund()
+
+def setForkingEvent(branch, eventId):
+    self.controller.assertOnlySpecifiedCaller(msg.sender, "branchesActions")
+    self.forkingEvents[branch] = eventId
+
+def getForkingEvent(branch):
+    return(self.forkingEvents[branch])

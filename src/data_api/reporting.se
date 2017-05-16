@@ -1,222 +1,114 @@
 # Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
 
-extern controller: [lookup:[int256]:int256, assertIsWhitelisted:[int256]:int256]
-
-BRANCHES = self.controller.lookup('branches')
-extern branches: [addCurrency:[int256,int256,int256,int256]:int256, addMarketToBranch:[int256,int256]:int256, disableCurrency:[int256,int256]:int256, getBaseReporters:[int256]:int256, getBranchByNum:[int256]:int256, getBranchCurrency:[int256,int256]:int256, getBranchWallet:[int256,int256]:int256, getBranches:[]:int256[], getBranchesStartingAt:[int256]:int256[], getCreationDate:[int256]:int256, getCurrencyActive:[int256,int256]:int256, getCurrencyByContract:[int256,int256]:int256, getCurrencyRate:[int256,int256]:int256, getEventForkedOver:[int256]:int256, getForkPeriod:[int256]:int256, getForkTime:[int256]:int256, getInitialBalance:[int256,int256,int256]:int256, getMarketIDsInBranch:[int256,int256,int256]:int256[], getMinTradingFee:[int256]:int256, getMostRecentChild:[int256]:int256, getNumBranches:[]:int256, getNumCurrencies:[int256]:int256, getNumMarketsBranch:[int256]:int256, getParent:[int256]:int256, getParentPeriod:[int256]:int256, getPeriodLength:[int256]:int256, getVotePeriod:[int256]:int256, incrementPeriod:[int256]:int256, initializeBranch:[int256,int256,int256,int256,int256,int256,int256,int256]:int256, reactivateCurrency:[int256,int256]:int256, removeLastCurrency:[int256]:int256, replaceCurrency:[int256,int256,int256,int256,int256]:int256, setBaseReporters:[int256,int256]:int256, setController:[address]:int256, setEventForkedOver:[int256,int256]:int256, setForkPeriod:[int256]:int256, setInitialBalance:[int256,int256,int256,int256]:int256, setMostRecentChild:[int256,int256]:int256, suicideFunds:[address]:_, updateCurrencyRate:[int256,int256,int256,int256]:int256, updateNumCurrencies:[int256,int256]:int256]
-
-# todo note in final version should be actual repcontract address on the mainnet
-REPCONTRACT = self.controller.lookup('repContract')
-extern repContract: [allowance:[address,address]:uint256, approve:[address,uint256]:uint256, balanceOf:[address]:uint256, decimals:[]:uint256, getRidOfDustForLaunch:[]:int256, getSeeded:[]:uint256, name:[]:uint256, setSaleDistribution:[address[],uint256[]]:uint256, symbol:[]:uint256, totalSupply:[]:uint256, transfer:[address,uint256]:uint256, transferFrom:[address,address,uint256]:uint256]
+extern controller: [lookup:[int256]:int256, checkWhitelist:[int256]:int256]
+extern events: [allowance:[int256,int256]:uint256, approve:[int256,int256]:int256, assertEventIsInAutomatedReportDisputePhase:[int256]:int256, assertEventIsInAutomatedReportPhase:[int256]:int256, assertEventIsInCurrentReportingWindow:[int256]:int256, assertEventIsInDisputePhase:[int256]:int256, assertEventIsInReportingPhase:[int256]:int256, assertEventIsNotDoneWithReporters:[int256]:int256, assertEventIsNotFinalized:[int256]:int256, assertReporterHasRegistrationToken:[int256]:int256, automatedReport:[int256,int256]:_, balanceOf:[int256,int256,int256,int256]:uint256, createEvent:[int256,int256,int256,int256]:int256, disputeAllReporters:[int256]:_, disputeAutomatedReport:[int256]:_, disputeLimitedReporters:[int256]:_, finalizeEvent:[int256]:_, getAutomatedReportDisputeDueTimestamp:[int256]:int256, getAutomatedReportDueTimestamp:[int256]:int256, getEventBranch:[int256]:int256, getNumberOfAllReporterEvents:[int256,int256]:int256, getNumberOfLimitedReporterEvents:[int256,int256]:int256, isEventFinalized:[int256]:int256, migrateEventThroughAllForks:[int256]:int256, migrateEventThroughOneFork:[int256]:int256, privateAdjustTentativeOutcome:[int256,int256]:_, privateBuyToken:[int256,int256,int256,int256]:_, privateRedeemCorrectOutcomeTokens:[int256,int256,int256,int256]:int256, privateTransfer:[int256,int256,int256,int256,int256,int256]:int256, privateTryRedeemTokensForNonForkingEventOnForkedBranch:[int256,int256,int256,int256]:int256, privateTryRedeemTokensOnForkingEvent:[int256,int256,int256,int256]:int256, redeemTokens:[int256,int256,int256]:int256, report:[int256,int256,int256]:int256, totalSupply:[int256,int256,int256]:uint256, transfer:[int256,int256,int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256,int256,int256]:int256, tryFinalizeEvent:[int256]:int256]
 
 inset('../macros/refund.sem')
-
-# Storage of all data associated with reporters
-    # Reporting index is the branch
-    # Reputation index is the index of the reporter
-    # RepIDtoIndex returns a reporter's reputation[] index given their reputationID as the key
-    # total rep is all the rep in augur
-    # active rep is the fxpAmount which is actually active
-    # fork is the child branch of a parent which forked
-    # fxpDormant rep stores fxpDormant rep values
-    # reportedOnNonFinalRoundTwoEvent is the eventID if a person reported on a round 2 event before it was in the second round [i.e. the first reporting backstop], they cannot convert their rep to dormant or send rep until they've finished the resolution process for that round 2 event, set this to 0 once the event is final
-data Reporting[](reputation[](repValue, reporterID), numberReporters, repIDtoIndex[], totalRep, dormantRep[](repValue, reporterID), activeRep, reportedOnNonFinalRoundTwoEvent[])
+inset('../macros/safeMath.sem')
+inset('../macros/unitConversions.sem')
 
 data controller
+data reportingPeriodSeconds
+data reportingDisputePeriodSeconds
+data reportsPerEvent
+# userReports[branch][reportingWindow][reporterAddress]
+data userReports[][][](reportedEvents[], reportedEventsCount, seed)
 
 def init():
     self.controller = 0x0
-    REPCONTRACT = self.controller.lookup('repContract')
-    self.Reporting[1010101].repIDtoIndex[1010101] = 0
-    redistributionRep = REPCONTRACT.balanceOf(0x0000000000000000000000000000000000000000)
-    self.Reporting[1010101].reputation[0].repValue = redistributionRep
-    self.Reporting[1010101].reputation[0].reporterID = 1010101
-    self.Reporting[1010101].dormantRep[0].reporterID = 1010101
-    self.Reporting[1010101].numberReporters = 2
-    self.Reporting[1010101].repIDtoIndex[msg.sender] = 1
-    self.Reporting[1010101].reputation[1].repValue = 0
-    self.Reporting[1010101].reputation[1].reporterID = msg.sender
-    self.Reporting[1010101].dormantRep[1].reporterID = msg.sender
-    self.Reporting[1010101].repIDtoIndex[msg.sender] = 1
-    self.Reporting[1010101].activeRep += redistributionRep
-    self.Reporting[1010101].totalRep += redistributionRep
+    self.reportingPeriodSeconds = 21 * SECONDS_PER_DAY
+    self.reportingDisputePeriodSeconds = 3 * SECONDS_PER_DAY
+    self.reportsPerEvent = 7
 
-def getReportedOnNonFinalRoundTwoEvent(branch, reporter):
-    return(self.Reporting[branch].reportedOnNonFinalRoundTwoEvent[reporter])
+def any():
+    refund()
 
-def setReportedOnNonFinalRoundTwoEvent(branch, event, reporter):
-    self.controller.assertIsWhitelisted(msg.sender)
-    self.Reporting[branch].reportedOnNonFinalRoundTwoEvent[reporter] = event
-    return(1)
-
-# @return fxp
-def getActiveRep(branch):
-    return(self.Reporting[branch].activeRep)
-
-def adjustActiveRep(branch, fxpAmount):
-    self.controller.assertIsWhitelisted(msg.sender)
-    self.Reporting[branch].activeRep += fxpAmount
-    return(1)
-
-# @return fxp
-def getRepByIndex(branch, repIndex):
-    return(self.Reporting[branch].reputation[repIndex].repValue)
-
-# @return fxp
-def getRepBalance(branch, address):
-    repIndex = self.Reporting[branch].repIDtoIndex[address]
-    if(!repIndex and self.Reporting[branch].reputation[repIndex].reporterID != address):
-        return(0)
-    return(self.Reporting[branch].reputation[repIndex].repValue)
-
-def getDormantRepByIndex(branch, repIndex):
-    return(self.Reporting[branch].dormantRep[repIndex].repValue)
-
-# getDormantRepBalance
-# @return fxp
-def balanceOfReporter(branch, address):
-    repIndex = self.Reporting[branch].repIDtoIndex[address]
-    if(!repIndex and self.Reporting[branch].reputation[repIndex].reporterID != address):
-        return(0)
-    return(self.Reporting[branch].dormantRep[repIndex].repValue)
-
-# return total supply of fxpDormant rep
-# @return fxp
-def totalSupply(branch):
-    return(self.Reporting[branch].totalRep - self.Reporting[branch].activeRep)
-
-def getReporterID(branch, index):
-    return(self.Reporting[branch].reputation[index].reporterID)
-
-def getTotalRep(branch):
-    return(self.Reporting[branch].totalRep)
-
-# will return 0s for array values after it's looped through all the ones you
-# have an actual balance in
-def getReputation(address):
-    branchListCount = BRANCHES.getNumBranches()
-    if(address):
-        branches = array(2 * branchListCount)
-        branchList = array(branchListCount)
-        branchList = BRANCHES.getBranches(outitems = branchListCount)
-        i = 0
-        b = 0
-        while(i < branchListCount):
-            branch = branchList[i]
-            balance = self.getRepBalance(branch, address)
-            if(balance != 0):
-                branches[b] = branch
-                branches[b + 1] = balance
-                b += 2
-            i += 1
-    else:
-        address = msg.sender
-        branches = array(2 * branchListCount)
-        branchList = array(branchListCount)
-        branchList = BRANCHES.getBranches(outitems = branchListCount)
-        i = 0
-        b = 0
-        while(i < branchListCount):
-            branch = branchList[i]
-            balance = self.getRepBalance(branch, address)
-            if(balance != 0):
-                branches[b] = branch
-                branches[b + 1] = balance
-                b += 2
-            i += 1
-    return(branches: arr)
-
-def getNumberReporters(branch):
-    return(self.Reporting[branch].numberReporters)
-
-def repIDToIndex(branch, repID):
-    repIndex = self.Reporting[branch].repIDtoIndex[repID]
-    if(self.Reporting[branch].reputation[repIndex].reporterID != repID):
+# TODO: simplify this to allow people to report on any event, as long as it doesn't already have too many reporters
+# only to be called for events being reported on by a subset of reporters, up to caller to make sure the event is generally elligible for reporting right now
+def assertCanReportOnEvent(eventId, reporterAddress):
+    # CONSIDER: change this scheme to just disallowing more than `n` reports per event, but allow anyone to report on anything
+    branch = self.controller.lookup('events').getEventBranch(eventId)
+    currentReportingWindow = self.getCurrentReportingWindow()
+    seed = self.getUserSeed(branch, currentReportingWindow, reporterAddress)
+    reportsPerReporter = self.getTargetReportsPerReporter(branch, reportingWindow)
+    # TODO: run a monte carlo simulation to verify this algorithm is reasonable
+    # TODO: figure out a variable name for this that makes sense to readers at a glance
+    # TODO: ensure this is tested for pathological cases like prime # of markets & prime # of reporters and 0 events and 1 event
+    personallyIndexedEvent = sha3([eventId, seed], items = 2) % totalReporters
+    if (personallyIndexedEvent >= reportsPerReporter):
         ~invalid()
-    return(repIndex)
-
-def setInitialReporters(branch):
-    self.controller.assertIsWhitelisted(msg.sender)
-    # add branch as a "reporter"
-    self.Reporting[branch].numberReporters = 1
-    self.Reporting[branch].repIDtoIndex[branch] = 0
-    self.Reporting[branch].reputation[0].repValue = 0
-    self.Reporting[branch].reputation[0].reporterID = branch
-    self.Reporting[branch].dormantRep[0].reporterID = branch
     return(1)
 
-def addReporter(branch, sender, fxpAmount, fxpDormant, fxpRepToBonderOrBranch):
-    self.controller.assertIsWhitelisted(msg.sender)
-    reporterIndex = self.Reporting[branch].numberReporters
-    self.Reporting[branch].repIDtoIndex[sender] = reporterIndex
-    self.Reporting[branch].reputation[reporterIndex].repValue = fxpAmount
-    self.Reporting[branch].reputation[reporterIndex].reporterID = sender
-    self.Reporting[branch].dormantRep[reporterIndex].reporterID = sender
-    self.Reporting[branch].dormantRep[reporterIndex].repValue = fxpDormant
-    self.Reporting[branch].activeRep += fxpAmount + fxpRepToBonderOrBranch
-    self.Reporting[branch].totalRep += fxpAmount + fxpDormant + fxpRepToBonderOrBranch
-    self.Reporting[branch].numberReporters += 1
-    return(1)
-
-def addRep(branch, index, fxpValue):
-    self.controller.assertIsWhitelisted(msg.sender)
-    self.Reporting[branch].reputation[index].repValue += fxpValue
-    return(1)
-
-def subtractRep(branch, index, fxpValue):
-    self.controller.assertIsWhitelisted(msg.sender)
-    self.Reporting[branch].reputation[index].repValue -= fxpValue
-    return(1)
-
-### Test Faucet Function that needs to be removed at launch TODO
-def setRep(branch, index, fxpNewRep):
-    self.controller.assertIsWhitelisted(msg.sender)
-    oldRep = self.Reporting[branch].reputation[index].repValue
-    self.Reporting[branch].reputation[index].repValue = fxpNewRep
-    self.Reporting[branch].activeRep += fxpNewRep - oldRep
-    self.Reporting[branch].totalRep += fxpNewRep - oldRep
-    return(1)
-
-def addDormantRep(branch, index, fxpValue):
-    self.controller.assertIsWhitelisted(msg.sender)
-    self.Reporting[branch].dormantRep[index].repValue += fxpValue
-    return(1)
-
-def subtractDormantRep(branch, index, fxpValue):
-    self.controller.assertIsWhitelisted(msg.sender)
-    self.Reporting[branch].dormantRep[index].repValue -= fxpValue
-    return(1)
-
-def claimInitialRepFromRepContract():
-    branch = 1010101
-    sender = msg.sender
-    dormantRep = REPCONTRACT.balanceOf(sender)
-    if(!dormantRep):
+# FIXME: if an event moves out of a reporting period (e.g., due to a fork) this may start to return an incorrect result
+def assertDoneReporting(branch, reportingWindow, reporterAddress):
+    eventsContract = self.controller.lookup('events')
+    totalAllReporterEvents = eventsContract.getNumberOfAllReporterEvents(branch, reportingWindow)
+    totalLimitedReporterEvents = eventsContract.getNumberOfLimitedReporterEvents(branch, reportingWindow)
+    targetReports = self.getTargetReportsPerReporter(branch, reportingWindow)
+    # TODO: test this to make sure that a user can't run out of events without reaching target
+    if (self.userReports[branch][reportingWindow][reporterAddress].reportedEventsCount < targetReports):
         ~invalid()
-    if(dormantRep != REPCONTRACT.allowance(sender, self)):
-        ~invalid()
-    if(!REPCONTRACT.transferFrom(sender, 0x0000000000000000000000000000000000000000, dormantRep)):
-        ~invalid()
-    if(self.Reporting[branch].repIDtoIndex[sender]):
-        ~invalid()
-    reporterIndex = self.Reporting[branch].numberReporters
-    self.Reporting[branch].repIDtoIndex[sender] = reporterIndex
-    self.Reporting[branch].reputation[reporterIndex].reporterID = sender
-    self.Reporting[branch].dormantRep[reporterIndex].reporterID = sender
-    self.Reporting[branch].dormantRep[reporterIndex].repValue = dormantRep
-    self.Reporting[branch].totalRep += dormantRep
-    self.Reporting[branch].numberReporters += 1
     return(1)
 
-# @controller
-def setController(newController: address):
-    if(msg.sender != self.controller):
-        ~invalid()
-    self.controller = newController
+# FIXME: gas issue
+def clearUserReports(branch, reportingWindow, reporterAddress):
+    self.controller.checkWhitelist(msg.sender)
+    i = 0
+    while(i < self.userReports[branch][reportingWindow][reporterAddress].reportedEventsCount):
+        self.userReports[branch][reportingWindow][reporterAddress].reportedEvents[i] = 0
+        i += 1
+    self.userReports[branch][reportingWindow][reporterAddress].reportedEventsCount = 0
+    self.userReports[branch][reportingWindow][reporterAddress].seed = 0
     return(1)
 
-# @controller
-def suicideFunds(to: address):
-    if(msg.sender != self.controller):
-        ~invalid()
-    suicide(to)
+def noteUserReport(branch, eventId):
+    self.controller.checkWhitelist(msg.sender)
+    currentReportingWindow = self.getCurrentReportingWindow()
+    startingEventCount = self.userReports[branch][currentReportingWindow][reporterAddress].reportedEventsCount
+    self.userReports[branch][currentReportingWindow][reporterAddress].reportedEvents[startingEventCount] = eventId
+    self.userReports[branch][currentReportingWindow][reporterAddress].reportedEventsCount = safeAdd(startingEventCount, 1)
+    return(1)
+
+def isInReportingPhase():
+    startTime = self.getCurrentReportingWindowStartTimestamp()
+    endTime = startTime + self.reportingPeriodSeconds
+    nowIsAfterStartTime = block.timestamp > startTime
+    nowIsBeforeEndTime = block.timestamp < endTime
+    return(nowIsAfterStartTime && nowIsBeforeEndTime)
+
+def isInReportingDisputePhase():
+    startTime = self.getCurrentReportingWindowStartTimestamp() + self.reportingPeriodSeconds
+    endTime = startTime + self.reportingDisputePeriodSeconds
+    nowIsAfterStartTime = block.timestamp > startTime
+    nowIsBeforeEndTime = block.timestamp < endTime
+    return(nowIsAfterStartTime && nowIsBeforeEndTime)
+
+def getReportingPeriodDurationInSeconds():
+    return(self.reportingPeriodSeconds + self.reportingDisputePeriodSeconds)
+
+def getCurrentReportingWindow():
+    return(self.getReportingWindowForTimestamp(block.timestamp))
+
+def getReportingWindowForTimestamp(timestamp):
+    return(timestamp / self.getReportingPeriodDurationInSeconds())
+
+def getCurrentReportingWindowStartTimestamp():
+    return(self.getCurrentReportingWindow() * self.getReportingPeriodDurationInSeconds())
+
+def getCurrentReportingWindowEndTimestamp():
+    return(self.getCurrentReportingWindowStartTimestamp() + self.getReportingPeriodDurationInSeconds())
+
+def getTargetReportsPerReporter(branch, reportingWindow):
+    numberOfLimitedReporterEvents = self.controller.lookup('events').getNumberOfLimitedReporterEvents(branch, reportingWindow)
+    numberOfAllReporterEvents = self.controller.lookup('events').getNumberOfAllReporterEvents(branch, reportingWindow)
+    totalReporters = self.controller.lookup('registrationToken').totalSupply(branch, reportingWindow)
+    totalLimitedReporterReports = safeMul(numberOfLimitedReporterEvents, self.reportsPerEvent)
+    reportsPerReporter = safeAdd(safeDiv(totalLimitedReporterReports, totalReporters), numberOfAllReporterEvents)
+    return(reportsPerReporter)
+
+def getUserSeed(branch, reportingWindow, reporterAddress):
+    seed = self.userReports[branch][reportingWindow][reporterAddress].seed
+    if (seed == 0):
+        seed = sha3([reporterAddress, block.prevhash], items = 2)
+        self.userReports[branch][reportingWindow][reporterAddress].seed = seed
+    return(seed)

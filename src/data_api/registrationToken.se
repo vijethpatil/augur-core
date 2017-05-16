@@ -1,0 +1,113 @@
+# Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
+
+extern controller: [lookup:[int256]:int256, checkWhitelist:[int256]:int256]
+extern reputationToken.se: [allowance:[int256,int256,int256]:uint256, approve:[int256,int256,int256]:int256, balanceOf:[int256,int256]:uint256, getErc20Token:[int256]:int256, migrate:[int256,int256,int256]:int256, migrateFromLegacyRepContract:[int256]:int256, privateTransfer:[int256,int256,int256,int256]:int256, totalSupply:[int256]:uint256, transfer:[int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256]:int256]
+extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int256]:_]
+extern reporting: [assertCanReportOnEvent:[int256,int256]:int256, assertDoneReporting:[int256,int256,int256]:int256, clearUserReports:[int256,int256,int256]:int256, getCurrentReportingWindow:[]:int256, getCurrentReportingWindowEndTimestamp:[]:int256, getCurrentReportingWindowStartTimestamp:[]:int256, getReportingPeriodDurationInSeconds:[]:int256, getReportingWindowForTimestamp:[int256]:int256, getTargetReportsPerReporter:[int256,int256]:int256, getUserSeed:[int256,int256,int256]:int256, isInReportingDisputePhase:[]:int256, isInReportingPhase:[]:int256, noteUserReport:[int256,int256]:int256]
+
+inset('../macros/safeMath.sem')
+inset('../macros/refund.sem')
+
+data controller
+# bond amount in attorep
+data bondAmount
+# tokens[branch][reporting_window][token_holder_address] returns count of registration tokens
+data tokens[][][2**160]
+# spenders[branch][reporting_window][token_holder_address][token_spender_address] returns count of registration tokens
+data spenders[][][2**160][2**160]
+# tokenSupply[branch][reporting_window] returns a count of outstanding registration tokens
+data tokenSupply[][]
+
+event Transfer(branch:uint256:indexed, reportingWindow:uint256, from:address:indexed, to:address:indexed, attorep:uint256)
+event Approval(branch:uint256:indexed, reportingWindow:uint256, owner:address:indexed, spender:address:indexed, attorep:uint256)
+
+def init():
+    self.controller = 0x0
+    # TODO: make this dynamically adjust based on the rate of bond forfeitures in previous preporting window(s)
+    self.bondAmount = 10**18
+
+def any():
+    refund()
+
+def register(branch, reportingWindow):
+    # do not allow for registration for reporting in the current window
+    if (reportingWindow <= self.controller.lookup('reporting').getCurrentReportingWindow()):
+        ~invalid()
+    self.controller.lookup('reputationToken').transferFrom(branch, msg.sender, self, bondAmount)
+    startingTokens = self.tokens[branch][reportingWindow][msg.sender]
+    self.tokens[branch][reportingWindow][msg.sender] = safeAdd(startingRegistrationTokens, 1)
+
+def migrateRegistrationToken(parentBranch, childBranch, reportingWindow, tokensToMigrate):
+    branchesContract = self.controller.lookup('branches')
+    # validate that the source branch is actually forked/forking
+    parentForkingEvent = branchesContract.getForkingEvent(parentBranch)
+    if (parentForkingEvent == 0):
+        ~invalid()
+    # validate that destinationBranch is a child of sourceBranch
+    sourceBranchHashHighBits = sha3(sourceBranch) & 0xffffffffffffffff000000000000000000000000000000000000000000000000
+    destinationBranchParentHashHighBits = destinationBranch & 0xffffffffffffffff000000000000000000000000000000000000000000000000
+    if (sourceBranchHashHighBits != destinationBranchParentHashHighBits):
+        ~invalid()
+    # do the transfer
+    startingTokensOnParent = self.tokens[parentBranch][reportingWindow][msg.sender]
+    startingTokensOnChild = self.tokens[childBranch][reportingWindow][msg.sender]
+    startingSupplyOnParent = self.tokenSupply[parentBranch][reportingWindow]
+    startingSupplyOnChild = self.tokenSupply[childBranch][reportingWindow]
+    self.tokens[parentBranch][reportingWindow][msg.sender] = safeSub(startingTokensOnParent, tokensToMigrate)
+    self.tokens[childBranch][reportingWindow][msg.sender] = safeAdd(startingTokensOnChild, tokensToMigrate)
+    self.tokenSupply[parentBranch][reportingWindow] = safeSub(startingSupplyOnParent, tokensToMigrate)
+    self.tokenSupply[childBranch][reportingWindow] = safeAdd(startingSupplyOnChild, tokensToMigrate)
+    return(1)
+
+def redeem(branch, reportingWindow):
+    startingTokens = self.tokens[branch][reportingWindow][msg.sender]
+    startingSupply = self.tokenSupply[branch][reportingWindow]
+    reportingContract = self.controller.lookup('reporting')
+    reportingContract.assertDoneReporting(branch, reportingWindow, msg.sender)
+    self.tokens[branch][reportingWindow][msg.sender] = safeSub(startingTokens, 1)
+    self.tokenSupply[branch][reportingWindow] = safeSub(startingSupply, 1)
+    reportingContract.clearUserReports(branch, reportingWindow, msg.sender)
+    self.controller.lookup('reputation').transfer(branch, msg.sender, self.bondAmount)
+
+####
+#### ERC20-like implementation
+####
+
+def totalSupply(branch, reportingWindow):
+	return(self.tokenSupply[branch][reportingWindow]: uint256)
+
+def registrationTokenBalance(branch, reportingWindow, address):
+	return(self.tokens[branch][reportingWindow][address]: uint256)
+
+def transfer(branch, reportingWindow, destinationAddress, attorep):
+    return(self.privateTransfer(branch, reportingWindow, msg.sender, destinationAddress, attorep))
+
+def transferFrom(branch, reportingWindow, sourceAddress, destinationAddress, attorep):
+    startingLimit = self.spenders[branch][reportingWindow][sourceAddress][msg.sender]
+    self.spenders[branch][reportingWindow][sourceAddress][msg.sender] = safeSub(startingLimit, attorep)
+    return(self.privateTransfer(branch, reportingWindow, sourceAddress, destinationAddress, attorep))
+
+def approve(branch, reportingWindow, spenderAddress, attorep):
+    self.spenders[branch][reportingWindow][msg.sender][spenderAddress] = attorep
+    log(type = Approval, branch, reportingWindow, msg.sender, spenderAddress, attorep)
+    return(1)
+
+def allowance(branch, reportingWindow, ownerAddress, spenderAddress):
+    return(self.spenders[branch][reportingWindow][ownerAddress][spenderAddress]: uint256)
+
+####
+#### Private
+####
+
+macro privateOnly():
+    if (msg.sender != self):
+        ~invalid()
+
+def privateTransfer(branch, reportingWindow, sourceAddress, destinationAddress, attorep):
+    privateOnly()
+    startingSourceTokens = self.tokens[branch][reportingWindow][sourceAddress]
+    startingDestinationTokens = self.tokens[branch][reportingWindow][destinationAddress]
+    self.tokens[branch][reportingWindow][sourceAddress] = safeSub(startingSourceTokens, attorep)
+    self.tokens[branch][reportingWindow][destinationAddress] = safeAdd(startingDestinationTokens, attorep)
+    log(type = Transfer, branch, reportingWindow, sourceAddress, destinationAddress, attorep)
+    return(1)

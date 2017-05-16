@@ -151,6 +151,10 @@ def assertIsWhitelisted(address):
     else:
         ~invalid()
 
+def assertOnlySpecifiedCaller(callerAddress, allowedCallerContractName):
+    if (self.registry[allowedCallerContractName].value != callerAddress):
+        ~invalid()
+
 def lookup(key):
     return(self.registry[key].value)
 

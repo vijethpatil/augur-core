@@ -1,0 +1,23 @@
+# Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
+
+extern controller: [lookup:[str]:address, assertIsWhitelisted:[address]:uint256, assertOnlySpecifiedCaller:[address, str]:_]
+
+inset('../macros/refund.sem')
+
+data controller
+
+BRANCHES_STORAGE = self.controller.lookup('branchesStorage')
+extern branchesData: [getForkingEvent:[uint256]:uint256, setForkingEvent:[uint256,uint256]:_]
+
+inset('../macros/refund.sem')
+
+def init():
+    self.controller = 0x0
+
+def any():
+    refund()
+
+def setForkingEvent(branch, eventId):
+    if(BRANCHES.getForkingEvent(branch) != 0):
+        ~invalid()
+    BRANCHES.setForkingEvent(branch, eventId)
