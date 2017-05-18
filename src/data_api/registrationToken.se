@@ -6,6 +6,7 @@ extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int25
 extern reporting: [assertCanReportOnEvent:[int256,int256]:int256, assertDoneReporting:[int256,int256,int256]:int256, clearUserReports:[int256,int256,int256]:int256, getCurrentReportingWindow:[]:int256, getCurrentReportingWindowEndTimestamp:[]:int256, getCurrentReportingWindowStartTimestamp:[]:int256, getReportingPeriodDurationInSeconds:[]:int256, getReportingWindowForTimestamp:[int256]:int256, getTargetReportsPerReporter:[int256,int256]:int256, getUserSeed:[int256,int256,int256]:int256, isInReportingDisputePhase:[]:int256, isInReportingPhase:[]:int256, noteUserReport:[int256,int256]:int256]
 
 inset('../macros/safeMath.sem')
+inset('../macros/assertPrivateCall')
 inset('../macros/refund.sem')
 
 data controller
@@ -76,7 +77,7 @@ def redeem(branch, reportingWindow):
 def totalSupply(branch, reportingWindow):
 	return(self.tokenSupply[branch][reportingWindow]: uint256)
 
-def registrationTokenBalance(branch, reportingWindow, address):
+def balanceOf(branch, reportingWindow, address):
 	return(self.tokens[branch][reportingWindow][address]: uint256)
 
 def transfer(branch, reportingWindow, destinationAddress, attorep):
@@ -99,12 +100,8 @@ def allowance(branch, reportingWindow, ownerAddress, spenderAddress):
 #### Private
 ####
 
-macro privateOnly():
-    if (msg.sender != self):
-        ~invalid()
-
 def privateTransfer(branch, reportingWindow, sourceAddress, destinationAddress, attorep):
-    privateOnly()
+    assertPrivateCall()
     startingSourceTokens = self.tokens[branch][reportingWindow][sourceAddress]
     startingDestinationTokens = self.tokens[branch][reportingWindow][destinationAddress]
     self.tokens[branch][reportingWindow][sourceAddress] = safeSub(startingSourceTokens, attorep)

@@ -1,0 +1,170 @@
+# Copyright (C) 2015 Forecast Foundation OU, full GPL notice in LICENSE
+
+extern controller: [lookup:[int256]:int256, assertIsWhitelisted:[int256]:int256]
+
+REPUTATION_TOKEN = self.controller.lookup('reputationToken')
+extern reputationToken: [transfer:[uint256, address, uint256]:_, transferFrom:[uint256,address,address,uint256]:_, balanceOf:[uint256,address]:uint256]
+
+EVENTS = self.controller.lookup('events')
+extern events: [getEventBranch:[uint256]:uint256, assertCanReportOnEvent:[address, uint256]:_]
+
+REPORTING = self.controller.lookup('reporting')
+extern reporting: [noteUserReport:[uint256, uint256]:_]
+
+REGISTRATION_TOKEN = self.controller.lookup('registrationToken')
+extern registrationToken: [balanceOf:[uint256,uint256,uint256]:uint256]
+
+inset('../macros/refund.sem')
+inset('../macros/assertPrivateCall.sem')
+inset('../macros/safeMath.sem')
+
+# 2** 128 = outcome; 2**160 = reporter
+data controller
+data eventId
+data branchId
+data tokens[2**128][2**160]
+data tokenSupply[2**128]
+data allOutcomeTokenSupply
+data winningOutcome
+
+def init():
+    self.controller = 0x0
+
+def any():
+    refund()
+
+def initialize(eventId, branch):
+    self.eventId = eventId
+    self.branch = branch
+
+def buy(outcome, attorep):
+    eventId = self.eventId
+    branchId = self.branchId
+    reporter = msg.sender
+    EVENTS.assertEventCanBeReportedOn(eventId)
+    self.assertEventIsNotDoneWithReporters(eventId)
+    self.assertReporterHasRegistrationToken(reporter)
+    self.assertBranchMatchesEventBranch()
+    REPUTATION_TOKEN.transferFrom(branchId, reporter, self, attorep)
+    self.privateCreateAndAssignTokens(outcome, reporter, attorep)
+    self.privateAdjustWinningOutcome(outcome)
+    REPORTING.noteUserReport(branchId, eventId)
+
+def transfer(outcome, destination, attotokens):
+    source = msg.sender
+    startingSourceTokens = tokens[outcome][source]
+    startingDestinationTokens = tokens[outcome][destination]
+    tokens[outcome][source] = safeSub(startingSourceTokens, attotokens)
+    tokens[outcome][destination] = safeAdd(startingDestinationTokens, attotokens)
+
+def redeem(outcome, reporter):
+    eventId = self.eventId
+    eventBranchId = EVENTS.getEventBranch(eventId)
+    branchId = self.branch
+
+    isForkingEvent = # TODO: figure out how to identify whether an event was a forking event or not, and what its pre-fork branch was
+
+    # if this contract is for tokens purchased prior to a fork migration, redeem all outcomes at face value
+    if (eventBranchId != branchId and not isForkingEvent):
+        self.privateRedeemTokensAtFaceValue(outcome, reporter)
+        return
+
+    # if this contract is for an event that triggerd a fork, migrate REP to outcome branch and then redeem it at face value
+    EVENTS.finalizeEvent(eventId)
+    if (isForkingEvent):
+        self.privateRedeemTokensOnFork(outcome, reporter)
+        return
+
+    # for events that resolve normally (non-fork) redeem correct outcome tokens proportionately to pot
+    finalOutcome = EVENTS.getFinalOutcome(eventId)
+    if (finalOutcome != outcome):
+        ~invalid()
+    self.privateRedeemTokensProportionately(outcome, reporter)
+
+####
+#### Getters
+####
+
+def getWinningOutcome():
+    # TODO: implement
+
+####
+#### Asserts
+####
+
+def assertBranchMatchesEventBranch():
+    if (EVENTS.getEventBranch(eventId) != branchId):
+        ~invalid()
+
+def assertEventIsNotDoneWithReporters():
+    if (EVENTS.getAllReportersOutcome(self.eventId) != 0):
+        ~invalid()
+
+def assertReporterHasRegistrationToken(reporterAddress):
+    eventId = self.eventId
+    branch = self.branchId
+    reportingWindow = self.events[eventId].reportingWindow
+    numberOfRegistrationTokens = REGISTRATION_TOKEN.balanceOf(branch, reportingWindow, reporterAddress)
+    if (numberOfRegistrationTokens < 1):
+        ~invalid()
+    return(1)
+
+####
+#### Private
+####
+
+def privateRedeemTokensProportionately(outcome, reporter):
+    assertPrivateCall()
+    branchId = self.branchId
+    # deduct tokens from reporter
+    attotokens = self.tokens[outcome][reporter]
+    startingTokenSupply = self.tokenSupply[outcome]
+    startingAllOutcomesTokenSupply = self.allOutcomesTokenSupply
+    self.tokens[outcome][reporter] = 0
+    self.tokenSupply[outcome] = safeSub(startingTokenSupply, attotokens)
+    self.allOutcomesTokenSupply = safeSub(startingAllOutcomesTokenSupply, attotokens)
+    # give REP proportionate to rep_held_by_contract * tokens_being_destroyed / winning_outcome_token_supply
+    reputationToDistribute = REPUTATION_TOKEN.balanceOf(branchId, self)
+    reporterShare = attotokens
+    totalShares = startingAllOutcomesTokenSupply
+    reporterShareOfRep = reputationToDistribute * myShare / totalShares
+    REPUTATION_TOKEN.transfer(reporter, reporterShareOfRep)
+
+def privateRedeemTokensAtFaceValue(outcome, reporter):
+    assertPrivateCall()
+    # deduct tokens from reporter
+    attotokens = self.tokens[outcome][reporter]
+    startingTokenSupply = self.tokenSupply[outcome]
+    startingAllOutcomesTokenSupply = self.allOutcomesTokenSupply
+    self.tokens[outcome][reporter] = 0
+    self.tokenSupply[outcome] = safeSub(startingTokenSupply, attotokens)
+    self.allOutcomesTokenSupply = safeSub(startingAllOutcomesTokenSupply, attotokens)
+    # send REP at 1:1 ratio to reporter
+    REPUTATION_TOKEN.transfer(branchId, reporter, attotokens)
+
+def privateRedeemTokensOnFork(outcome, reporter):
+    assertPrivateCall()
+    preForkBranchId = # TODO: get pre-fork branchId
+    eventId = self.eventId
+    forkedOutcomeBranchId = BRANCHES_ACTIONS.computeBranchId(preForkBranchId, eventId, outcome)
+    attotokens = tokens[outcome][reporter]
+    tokens[outcome][reporter] = 0
+    REPUTATION_TOKEN.migrate(preForkBranchId, forkedOutcomeBranchId, attotokens)
+    REPUTATION_TOKEN.transfer(forkedOutcomeBranchId, reporter, attotokens)
+
+def privateCreateAndAssignTokens(outcome, reporter, attotokens):
+    assertPrivateCall()
+    startingAttotoken = self.tokens[outcome][reporter]
+    startingTokenSupply = self.tokenSupply[outcome]
+    startingAllOutcomesTokenSupply = self.allOutcomesTokenSupply
+    self.events[eventId].tokens[outcome][reporter] = safeAdd(startingAttotoken, attotokens)
+    self.events[eventId].tokenSupply[outcome] = safeAdd(startingTokenSupply, attotokens)
+    self.events[eventId].allOutcomesTokenSupply = safeAdd(startingAllOutcomesTokenSupply, attotokens)
+
+def privateAdjustWinningOutcome(outcome):
+    assertPrivateCall()
+    outcomeVolume = self.tokenSupply[outcome]
+    currentWinningOutcome = self.winningOutcome
+    currentWinningOutcomeVolume = self.tokenSupply[currentWinningOutcome]
+    if (outcomeVolume > currentWinningOutcomeVolume):
+        self.winningOutcome = outcome

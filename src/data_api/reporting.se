@@ -25,22 +25,6 @@ def init():
 def any():
     refund()
 
-# TODO: simplify this to allow people to report on any event, as long as it doesn't already have too many reporters
-# only to be called for events being reported on by a subset of reporters, up to caller to make sure the event is generally elligible for reporting right now
-def assertCanReportOnEvent(eventId, reporterAddress):
-    # CONSIDER: change this scheme to just disallowing more than `n` reports per event, but allow anyone to report on anything
-    branch = EVENTS.getEventBranch(eventId)
-    currentReportingWindow = self.getCurrentReportingWindow()
-    seed = self.getUserSeed(branch, currentReportingWindow, reporterAddress)
-    reportsPerReporter = self.getTargetReportsPerReporter(branch, reportingWindow)
-    # TODO: run a monte carlo simulation to verify this algorithm is reasonable
-    # TODO: figure out a variable name for this that makes sense to readers at a glance
-    # TODO: ensure this is tested for pathological cases like prime # of markets & prime # of reporters and 0 events and 1 event
-    personallyIndexedEvent = sha3([eventId, seed], items = 2) % totalReporters
-    if (personallyIndexedEvent >= reportsPerReporter):
-        ~invalid()
-    return(1)
-
 # FIXME: if an event moves out of a reporting period (e.g., due to a fork) this may start to return an incorrect result
 def assertDoneReporting(branch, reportingWindow, reporterAddress):
     eventsContract = self.controller.lookup('events')
@@ -64,6 +48,9 @@ def clearUserReports(branch, reportingWindow, reporterAddress):
     return(1)
 
 def noteUserReport(branch, eventId):
+    # TODO: always give credit for events in all-reporters phase
+    # TODO: only give credit if the event being reported on isn't oversubscribed for events in limited-reporters phase
+    # TODO: determine oversubscription by calculating target reporters per limited-reporters event plus a little wiggle room
     self.controller.assertIsWhitelisted(msg.sender)
     currentReportingWindow = self.getCurrentReportingWindow()
     startingEventCount = self.userReports[branch][currentReportingWindow][reporterAddress].reportedEventsCount

@@ -6,6 +6,7 @@ extern controller: [lookup:[int256]:int256, assertIsWhitelisted:[int256]:int256]
 extern branches: [getForkingEvent:[int256]:int256, setForkingEvent:[int256,int256]:int256]
 
 inset('../macros/safeMath.sem')
+inset('../macros/assertPrivateCall')
 inset('../macros/refund.sem')
 
 data controller
@@ -105,12 +106,8 @@ def allowance(branch, ownerAddress, spenderAddress):
 #### Private
 ####
 
-macro privateOnly():
-    if (msg.sender != self):
-        ~invalid()
-
 def privateTransfer(branch, sourceAddress, destinationAddress, attorep):
-    privateOnly()
+    assertPrivateCall()
     startingSourceAttoRep = self.tokens[branch][sourceAddress]
     startingDestinationAttoRep = self.tokens[branch][destinationAddress]
     self.tokens[branch][sourceAddress] = safeSub(startingSourceAttoRep, attorep)

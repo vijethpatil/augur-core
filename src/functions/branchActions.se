@@ -6,7 +6,7 @@ inset('../macros/refund.sem')
 
 data controller
 
-BRANCHES_STORAGE = self.controller.lookup('branchesStorage')
+BRANCH_STORAGE = self.controller.lookup('branchStorage')
 extern branchesData: [getForkingEvent:[uint256]:uint256, setForkingEvent:[uint256,uint256]:_]
 
 inset('../macros/refund.sem')
@@ -21,3 +21,10 @@ def setForkingEvent(branch, eventId):
     if(BRANCHES.getForkingEvent(branch) != 0):
         ~invalid()
     BRANCHES.setForkingEvent(branch, eventId)
+
+def computeBranchId(branch, eventId, outcome):
+    parentBranchBits = sha3(branch) & 0xffffffffffffffff000000000000000000000000000000000000000000000000
+    eventBits = sha3(eventId) & 0x0000000000000000ffffffffffffffff00000000000000000000000000000000
+    outcomeBits = sha3(outcome) & 0x00000000000000000000000000000000ffffffffffffffffffffffffffffffff
+    outcomeBranchId = parentBranchBits | eventBits | outcomeBits
+    return(outcomeBranchId)

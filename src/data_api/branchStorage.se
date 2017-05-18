@@ -15,7 +15,7 @@ def any():
     refund()
 
 def setForkingEvent(branch, eventId):
-    self.controller.assertOnlySpecifiedCaller(msg.sender, "branchesActions")
+    self.controller.assertOnlySpecifiedCaller(msg.sender, "branchActions")
     self.forkingEvents[branch] = eventId
 
 def getForkingEvent(branch):
