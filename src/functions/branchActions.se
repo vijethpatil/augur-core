@@ -7,7 +7,7 @@ inset('../macros/refund.sem')
 data controller
 
 BRANCH_STORAGE = self.controller.lookup('branchStorage')
-extern branchesData: [getForkingEvent:[uint256]:uint256, setForkingEvent:[uint256,uint256]:_]
+extern branchesData: [getForkingMarket:[uint256]:uint256, setForkingMarket:[uint256,uint256]:_]
 
 inset('../macros/refund.sem')
 
@@ -17,14 +17,15 @@ def init():
 def any():
     refund()
 
-def setForkingEvent(branch, eventId):
-    if(BRANCHES.getForkingEvent(branch) != 0):
+def setForkingMarket(branch, market):
+    if(BRANCHES.getForkingMarket(branch) != 0):
         ~invalid()
-    BRANCHES.setForkingEvent(branch, eventId)
+    BRANCHES.setForkingMarket(branch, market)
 
-def computeBranchId(branch, eventId, outcome):
+def computeBranchId(branch, marketId, outcome):
     parentBranchBits = sha3(branch) & 0xffffffffffffffff000000000000000000000000000000000000000000000000
-    eventBits = sha3(eventId) & 0x0000000000000000ffffffffffffffff00000000000000000000000000000000
+    marketBits = (sha3(marketId) << 128) & 0x0000000000000000ffffffffffffffff00000000000000000000000000000000
+    # FIXME: this probably doesn't work with negative numbers
     outcomeBits = sha3(outcome) & 0x00000000000000000000000000000000ffffffffffffffffffffffffffffffff
-    outcomeBranchId = parentBranchBits | eventBits | outcomeBits
+    outcomeBranchId = parentBranchBits | marketBits | outcomeBits
     return(outcomeBranchId)

@@ -3,7 +3,10 @@
 extern controller: [lookup:[int256]:int256, assertIsWhitelisted:[int256]:int256]
 
 EVENTS = self.controller.lookup('events')
-extern events: [allowance:[int256,int256]:uint256, approve:[int256,int256]:int256, assertEventIsInAutomatedReportDisputePhase:[int256]:int256, assertEventIsInAutomatedReportPhase:[int256]:int256, assertEventIsInCurrentReportingWindow:[int256]:int256, assertEventIsInDisputePhase:[int256]:int256, assertEventIsInReportingPhase:[int256]:int256, assertEventIsNotDoneWithReporters:[int256]:int256, assertEventIsNotFinalized:[int256]:int256, assertReporterHasRegistrationToken:[int256]:int256, automatedReport:[int256,int256]:_, balanceOf:[int256,int256,int256,int256]:uint256, createEvent:[int256,int256,int256,int256]:int256, disputeAllReporters:[int256]:_, disputeAutomatedReport:[int256]:_, disputeLimitedReporters:[int256]:_, finalizeEvent:[int256]:_, getAutomatedReportDisputeDueTimestamp:[int256]:int256, getAutomatedReportDueTimestamp:[int256]:int256, getEventBranch:[int256]:int256, getNumberOfAllReporterEvents:[int256,int256]:int256, getNumberOfLimitedReporterEvents:[int256,int256]:int256, isEventFinalized:[int256]:int256, migrateEventThroughAllForks:[int256]:int256, migrateEventThroughOneFork:[int256]:int256, privateAdjustTentativeOutcome:[int256,int256]:_, privateBuyToken:[int256,int256,int256,int256]:_, privateRedeemCorrectOutcomeTokens:[int256,int256,int256,int256]:int256, privateTransfer:[int256,int256,int256,int256,int256,int256]:int256, privateTryRedeemTokensForNonForkingEventOnForkedBranch:[int256,int256,int256,int256]:int256, privateTryRedeemTokensOnForkingEvent:[int256,int256,int256,int256]:int256, redeemTokens:[int256,int256,int256]:int256, report:[int256,int256,int256]:int256, totalSupply:[int256,int256,int256]:uint256, transfer:[int256,int256,int256,int256,int256]:int256, transferFrom:[int256,int256,int256,int256,int256,int256]:int256, tryFinalizeEvent:[int256]:int256]
+extern events: [a:[]:_]
+
+REGISTRATION_TOKEN = self.controller.lookup('registrationToken')
+extern registrationToken: [b:[]:_]
 
 inset('../macros/refund.sem')
 inset('../macros/safeMath.sem')
@@ -14,7 +17,9 @@ data reportingPeriodSeconds
 data reportingDisputePeriodSeconds
 data reportsPerEvent
 # userReports[branch][reportingWindow][reporterAddress]
-data userReports[][][](reportedEvents[], reportedEventsCount, seed)
+data userReports[][][](markets[], count)
+# marketReporterCount[branch][reportingWindow][market] => count
+data marketReporterCount[][][]
 
 def init():
     self.controller = 0x0
@@ -25,38 +30,46 @@ def init():
 def any():
     refund()
 
-# FIXME: if an event moves out of a reporting period (e.g., due to a fork) this may start to return an incorrect result
-def assertDoneReporting(branch, reportingWindow, reporterAddress):
-    eventsContract = self.controller.lookup('events')
-    totalAllReporterEvents = eventsContract.getNumberOfAllReporterEvents(branch, reportingWindow)
-    totalLimitedReporterEvents = eventsContract.getNumberOfLimitedReporterEvents(branch, reportingWindow)
-    targetReports = self.getTargetReportsPerReporter(branch, reportingWindow)
-    # TODO: test this to make sure that a user can't run out of events without reaching target
-    if (self.userReports[branch][reportingWindow][reporterAddress].reportedEventsCount < targetReports):
-        ~invalid()
-    return(1)
-
-# FIXME: gas issue
+# FIXME: gas issue, may cost a lot to run but should come with a hefty gas refund
+# CONSIDER: if we dis-allow multiple registration token redemptions then we can just set the `.count` to 0
 def clearUserReports(branch, reportingWindow, reporterAddress):
     self.controller.assertIsWhitelisted(msg.sender)
     i = 0
-    while(i < self.userReports[branch][reportingWindow][reporterAddress].reportedEventsCount):
-        self.userReports[branch][reportingWindow][reporterAddress].reportedEvents[i] = 0
+    while(i < self.userReports[branch][reportingWindow][reporterAddress].count):
+        market = self.userReports[branch][reportingWindow][reporterAddress].markets[i]
+        self.userReports[branch][reportingWindow][reporterAddress].markets[i] = 0
+        self.marketReporterCount[branch][reportingWindow][market] -= 1
         i += 1
-    self.userReports[branch][reportingWindow][reporterAddress].reportedEventsCount = 0
-    self.userReports[branch][reportingWindow][reporterAddress].seed = 0
+    self.userReports[branch][reportingWindow][reporterAddress].count = 0
     return(1)
 
-def noteUserReport(branch, eventId):
-    # TODO: always give credit for events in all-reporters phase
-    # TODO: only give credit if the event being reported on isn't oversubscribed for events in limited-reporters phase
-    # TODO: determine oversubscription by calculating target reporters per limited-reporters event plus a little wiggle room
-    self.controller.assertIsWhitelisted(msg.sender)
-    currentReportingWindow = self.getCurrentReportingWindow()
-    startingEventCount = self.userReports[branch][currentReportingWindow][reporterAddress].reportedEventsCount
-    self.userReports[branch][currentReportingWindow][reporterAddress].reportedEvents[startingEventCount] = eventId
-    self.userReports[branch][currentReportingWindow][reporterAddress].reportedEventsCount = safeAdd(startingEventCount, 1)
-    return(1)
+def noteUserReport(marketId, outcome, reporter):
+    # trustlessly verify that the user has in fact reported on the given market, this way we don't have to whitelist all markets/reporting tokens
+    market = EVENTS.getMarket(marketId)
+    market.assertCanBeReportedOn()
+    reportingToken = market.getReportingToken()
+    reportingToken.assertReporterHasReported(outcome, reporter)
+    branchId = market.getBranchId()
+    window = self.getCurrentReportingWindow()
+    # always give credit for events in all-reporters phase
+    if (market.getReportingPhase() == 3):
+        self.privateNoteUserReport(market, reporter)
+    # only events in limited/all reporting phase are valid to report on
+    else if (market.getReportingPhase() != 2):
+        ~invalid()
+    # only give credit for limited reporter markets up to the max reporters for that market
+    marketReporterCount = self.marketReporterCount[branchId][window][reporter]
+    maxReportsPerLimitedReporterMarket = self.getMaxReportsPerLimitedReporterMarket(branchId, window)
+    if (marketReporterCount < maxReportsPerLimitedReporterMarket):
+        self.privateNoteUserReport(market, reporter)
+
+####
+#### Helpers
+####
+
+####
+#### Getters
+####
 
 def isInReportingPhase():
     startTime = self.getCurrentReportingWindowStartTimestamp()
@@ -87,17 +100,54 @@ def getCurrentReportingWindowStartTimestamp():
 def getCurrentReportingWindowEndTimestamp():
     return(self.getCurrentReportingWindowStartTimestamp() + self.getReportingPeriodDurationInSeconds())
 
-def getTargetReportsPerReporter(branch, reportingWindow):
-    numberOfLimitedReporterEvents = self.controller.lookup('events').getNumberOfLimitedReporterEvents(branch, reportingWindow)
-    numberOfAllReporterEvents = self.controller.lookup('events').getNumberOfAllReporterEvents(branch, reportingWindow)
-    totalReporters = self.controller.lookup('registrationToken').totalSupply(branch, reportingWindow)
-    totalLimitedReporterReports = safeMul(numberOfLimitedReporterEvents, self.reportsPerEvent)
-    reportsPerReporter = safeAdd(safeDiv(totalLimitedReporterReports, totalReporters), numberOfAllReporterEvents)
+def getTargetReportsPerLimitedReporterMarket(branchId, reportingWindow):
+    limitedReporterMarketCount = EVENTS.getNumberOfLimitedReporterEvents(branchId, reportingWindow)
+    reportersThisSession = REGISTRATION_TOKEN.totalSupply(branchId, reportingWindow)
+    minimumReportsPerMarket = 7
+
+    if (reportersThisSession > (minimumReportsPerMarket * limitedReporterMarketCount)):
+        factor = reportersThisSession / (minimumReportsPerMarket * limitedReporterMarketCount)
+        minimumReportsPerMarket = minimumReportsPerMarket * factor
+
+def getMaxReportsPerLimitedReporterMarket(branchId, reportingWindow):
+    return(self.getTargetReportsPerLimitedReporterMarket(branchId, reportingWindow) + 2)
+
+def getRequiredReportsPerReporterForLimitedReportingMarkets(branchId, reportingWindow):
+    targetReportsPerMarket = self.getTargetReportsPerLimitedReporterMarket(branchId, reportingWindow)
+    limitedReporterMarketCount = EVENTS.getNumberOfLimitedReporterEvents(branchId, reportingWindow)
+    reportersThisSession = REGISTRATION_TOKEN.totalSupply(branchId, reportingWindow)
+    reportsPerReporter = targetReportsPerMarket * limitedReporterMarketCount / reportersThisSession
     return(reportsPerReporter)
 
-def getUserSeed(branch, reportingWindow, reporterAddress):
-    seed = self.userReports[branch][reportingWindow][reporterAddress].seed
-    if (seed == 0):
-        seed = sha3([reporterAddress, block.prevhash], items = 2)
-        self.userReports[branch][reportingWindow][reporterAddress].seed = seed
-    return(seed)
+def getRequiredReportsPerReporter(branchId, reportingWindow):
+    limitedMarketReportsPerReporter = getRequiredReportsPerReporterForLimitedReportingMarkets(branchId, reportingWindow)
+    allReporterMarketsCount = EVENTS.getNumberOfAllReporterEvents(branchId, reportingWindow)
+    return(allReporterMarketsCount + limitedMarketReportsPerReporter)
+
+####
+#### Asserts
+####
+
+# CONSIDER: if an event moves out of a reporting period (e.g., due to a fork) this may start to return an incorrect result; can events move out of a reporting window _during_ a reporting window?
+def assertDoneReporting(branch, reportingWindow, reporterAddress):
+    totalAllReporterEvents = EVENTS.getNumberOfAllReporterEvents(branch, reportingWindow)
+    totalLimitedReporterEvents = EVENTS.getNumberOfLimitedReporterEvents(branch, reportingWindow)
+    targetReports = self.getTargetReportsPerReporter(branch, reportingWindow)
+    # TODO: test this to make sure that a user can't run out of events without reaching target
+    if (self.userReports[branch][reportingWindow][reporterAddress].reportedEventsCount < targetReports):
+        ~invalid()
+
+####
+#### Private
+####
+
+def privateNoteUserReport(market, reporter):
+    assertPrivateCall()
+    branchId = market.getBranchId()
+    window = self.getCurrentReportingWindow()
+    if (self.userReports[branchId][window][reporter].markets[market]):
+        return
+    oldCount = self.userReports[branchId][window][reporter].count
+    self.userReports[branchId][window][reporter].count = safeAdd(oldCount, 1)
+    self.userReports[branchId][window][reporter].markets[market] = 1
+    self.marketReporterCount[branchId][window][market] += 1

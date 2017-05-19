@@ -5,8 +5,8 @@ extern controller: [lookup:[str]:address, assertIsWhitelisted:[address]:uint256,
 inset('../macros/refund.sem')
 
 data controller
-# forkingEvents[branch] returns event id
-data forkingEvents[]
+# forkingMarkets[branchId] returns market contract address
+data forkingMarkets[]
 
 def init():
     self.controller = 0x0
@@ -14,9 +14,9 @@ def init():
 def any():
     refund()
 
-def setForkingEvent(branch, eventId):
+def setForkingMarket(branchId, market):
     self.controller.assertOnlySpecifiedCaller(msg.sender, "branchActions")
-    self.forkingEvents[branch] = eventId
+    self.forkingEvents[branchId] = market
 
-def getForkingEvent(branch):
-    return(self.forkingEvents[branch])
+def getForkingMarket(branchId):
+    return(self.forkingMarkets[branchId])
