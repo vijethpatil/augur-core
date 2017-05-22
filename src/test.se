@@ -2,6 +2,11 @@ extern markets: [addFees:[int256,int256]:int256, addToMarketsHash:[int256,int256
 extern shareTokens: [allowance:[address,address]:int256, approve:[address,uint256]:int256, balanceOf:[address]:int256, createShares:[address,uint256]:int256, destroyShares:[address,uint256]:int256, getDecimals:[]:int256, getName:[]:int256, getSymbol:[]:int256, setController:[address]:int256, suicideFunds:[address]:_, totalSupply:[]:int256, transfer:[address,uint256]:int256, transferFrom:[address,address,uint256]:int256]
 
 def ok(caddr):
-    # y = caddr.createShares(5, 11)
-    y = caddr
-    return(caddr)
+    # caddr.call(gas=500)
+    # ~calldatacopy(0, 0, ~calldatasize())
+    x = msg.gas
+    i = 0
+    while i < 50:
+        i += 1
+    y = msg.gas
+    return([x,y]: arr)

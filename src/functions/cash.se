@@ -129,7 +129,7 @@ def withdrawEther(sender: address, to: address, value: uint256):
             ~invalid()
         self.accounts[sender].balance -= value
         self.totalSupply -= value
-        if(!send(to, value)):
+        if(!send(msg.gas, to, value)):
             ~invalid()
         self.initiated[sender] = 0
         log(type = WithdrawEther, sender, value, self.accounts[sender].balance, block.timestamp)
