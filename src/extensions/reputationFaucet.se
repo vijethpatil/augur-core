@@ -11,36 +11,28 @@ extern events: [allowance:[int256,int256]:uint256, approve:[int256,int256]:int25
 REPORTING = self.controller.lookup('reporting')
 extern reporting: [assertCanReportOnEvent:[int256,int256]:int256, assertDoneReporting:[int256,int256,int256]:int256, clearUserReports:[int256,int256,int256]:int256, getCurrentReportingWindow:[]:int256, getCurrentReportingWindowEndTimestamp:[]:int256, getCurrentReportingWindowStartTimestamp:[]:int256, getReportingPeriodDurationInSeconds:[]:int256, getReportingWindowForTimestamp:[int256]:int256, getTargetReportsPerReporter:[int256,int256]:int256, getUserSeed:[int256,int256,int256]:int256, isInReportingDisputePhase:[]:int256, isInReportingPhase:[]:int256, noteUserReport:[int256,int256]:int256]
 
+REPUTATION_TOKEN = self.controller.lookup('reputationToken')
+extern reputationToken: [transfer:[uint256, address, uint256]:_, transferFrom:[uint256,address,address,uint256]:_, balanceOf:[uint256,address]:uint256]
+
 # using refund
 inset('../macros/refund.sem')
 # using fix
 inset('../macros/safeMath.sem')
+inset('../macros/unitConversions.sem')
 
 data controller
 
-event fundedAccount(branch: indexed, sender: indexed, cashBalance, repBalance, timestamp)
+event fundedAccount(branch: indexed, sender: indexed, repBalance, timestamp)
 
 ### Reputation faucet - get ~free rep!
-### TODO Fix to work with new system
 
 def init():
     self.controller = 0x0
 
 def reputationFaucet(branch):
     refund()
-    if(REPORTING.getRepBalance(branch, msg.sender)):
-        index = REPORTING.repIDToIndex(branch, msg.sender)
-    index = REPORTING.getNumberReporters(branch)
-    REPORTING.addReporter(branch, msg.sender, 0, 0, 0)
-    REPORTING.setRep(branch, index, fix(47))
-    periodLength = BRANCHES.getPeriodLength(branch)
-    if(block.timestamp % periodLength <= periodLength / 2):
-        penalizedUpTo = BRANCHES.getVotePeriod(branch) - 1
-    else:
-        penalizedUpTo = BRANCHES.getVotePeriod(branch)
-    CONSENSUSDATA.setPenalizedUpTo(branch, msg.sender, penalizedUpTo)
-    CONSENSUSDATA.setRepCollected(branch, msg.sender, penalizedUpTo)
-    log(type=fundedAccount, branch, msg.sender, fix(10000), fix(47), block.timestamp)
+    REPUTATION_TOKEN.transfer(branch, msg.sender, 47*WEI_TO_ETH)
+    log(type=fundedAccount, branch, msg.sender, fix(47), block.timestamp)
     return(1)
 
 def setController(newController: address):

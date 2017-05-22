@@ -165,8 +165,8 @@ def test_logReturn():
     test_logReturn()
 
 def test_closeMarket(contracts, state, t):
-    
-    
+
+
 def createBinaryEvent(contracts):
     global eventCreationCounter
     t = contracts._ContractLoader__tester
@@ -222,7 +222,7 @@ def unfix(n):
 
 if __name__ == '__main__':
     src = os.path.join(os.getenv('AUGUR_CORE', os.path.join(os.getenv('HOME', '/home/ubuntu'), 'workspace')), 'src')
-    contracts = ContractLoader(src, 'controller.se', ['mutex.se', 'cash.se', 'repContract.se'])
+    contracts = ContractLoader(src, 'controller.se', ['mutex.se', 'cash.se', 'repContract.se', 'reputationFaucet.se'])
     state = contracts._ContractLoader__state
     t = contracts._ContractLoader__tester
     test_refund(contracts, state, t)

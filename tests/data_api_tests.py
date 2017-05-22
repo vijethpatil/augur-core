@@ -1212,7 +1212,7 @@ def test_topics(contracts, s, t):
 
 if __name__ == '__main__':
     src = os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir, 'src')
-    contracts = ContractLoader(src, 'controller.se', ['mutex.se', 'cash.se', 'repContract.se'])
+    contracts = ContractLoader(src, 'controller.se', ['mutex.se', 'cash.se', 'repContract.se', 'reputationFaucet.se'])
     state = contracts._ContractLoader__state
     t = contracts._ContractLoader__tester
     print "BEGIN TESTING DATA_API"
